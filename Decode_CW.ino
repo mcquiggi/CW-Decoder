@@ -1,21 +1,38 @@
-// Conversion of my old Pascal CW decoder program for the Arduino.  KMCQ April 2024
+// Arduino Sketch for decoding Morse code on the pin 2 digital input pin.
 
-// Version 1.0
+//    A conversion of my old Assembler/Pascal CW decoder program circa 1983, modified to run on
+//    the Arduino.  KMCQ April 2024.
+//
+//    Written essentially in C with some shortcuts taken via the Arduino Sketch convenience functions
+//
+//    Arduino: Version 1.0
 
+//    Copyright 1983, 2024 by Kevin McQuiggin VE7ZD/KN7Q (mcquiggi@sfu.ca)
+//    Released under the GNU Public License (GPL) 3.0 in 2024
+//
+//    This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+//    published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+//
+//    This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of 
+//    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+//
+//    You should have received a copy of the GNU General Public License along with this program. If not, see \
+//    <https://www.gnu.org/licenses/>. 
 
-
-const int CW_PIN = 2;      // CW input is on Digital Pin 2
-int cw_state = 0;
 
 
 // Global variables:
-int time[16];
-int avg_speed, key_up_time, key_down_time;
-char symbol[8];
-char pattern[42][8];
-char alphabet[42];
-int handled = 0;      // Flag to indicate that key up event has been handled
-char letter[4];        // Pattern lookup result (string)
+const int CW_PIN = 2;         // CW input is on Digital Pin 2
+int cw_state = 0;             // State of the pin: 0 is key up; 1 is key down
+int time[16];                 // Vector that stores 16 most recent key down times in
+                              // in increments of 10 milliseconds
+int avg_speed, key_up_time,   // Duration variables (units of 10 ms)
+    key_down_time;
+char symbol[8];               // Accumulates the current CW symbol
+char pattern[42][8];          // Lookup table: symbols to alphanumeric character
+char alphabet[42];            // CW alphabet
+int handled = 0;              // Flag to indicate that key up event has been handled
+char letter[4];               // Symbol lookup result (string)
 
 
 // Function to store the last element key-down time and recompute the average element timing:
@@ -40,12 +57,12 @@ int update_speed() {
 }
 
 
-// Function to look up a dot-dash pattern and return the symbol it represents:
-char lookup_letter() {
+// Function to look up a dot-dash pattern and return the alphanumeric symbol it represents:
+char lookup_symbol() {
   int j;
 
   for (j=0; j < strlen(alphabet); j++) {
-    if (strcmp(pattern[j], letter) == 0)
+    if (strcmp(pattern[j], symbol) == 0)
       return(alphabet[j]);
   }
   return 0;                                   // Return 0 if the symbol was invalid
@@ -128,8 +145,9 @@ void loop() {
   // Get input state:
   cw_state = digitalRead(CW_PIN);
   
+  // Switch on the CW state (key up, or key down) and do some timing:
   if (cw_state) {
-    digitalWrite(LED_BUILTIN, HIGH);      // Note input on built-in LED
+    digitalWrite(LED_BUILTIN, HIGH);      // Note the input on Arduino's built-in LED
     
     // Time the key-down event:
     key_down_time=0;
@@ -142,7 +160,7 @@ void loop() {
     // Update the code speed average value:
     avg_speed=update_speed();
 
-    // Interpret code element:
+    // Interpret code element and append to symbol[]:
     if (key_down_time <= avg_speed)
       strcat(symbol, "0");
     else 
@@ -152,19 +170,19 @@ void loop() {
   else {
 
     // Key up time period:
-    digitalWrite(LED_BUILTIN, LOW);       // Note input on built-in LED
+    digitalWrite(LED_BUILTIN, LOW);       // Note the input on Arduino's built-in LED
     key_up_time=0;
     while (!digitalRead(CW_PIN) && !handled) {              
       key_up_time++;
       delay(10);
       if (key_up_time > avg_speed) {
-        c=lookup_letter();             // Look up letter and convert result to a string
+        c=lookup_symbol();                // Look up the symbol and convert it to a character
         if (c != 0) {
           letter[0]=c;
-          letter[1]=0;
+          letter[1]=0;                    // Zero terminate the character
         }
         else 
-          strcpy(letter, "@");                 // Bad CW character!
+          strcpy(letter, "@");            // Symbol not in the alphabet - indicate bad CW character!
         Serial.print(letter);
         strcpy(symbol, "");
         handled=1;
